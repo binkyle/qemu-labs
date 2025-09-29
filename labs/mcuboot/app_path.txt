@@ -1,0 +1,1 @@
+samples/subsys/mgmt/mcumgr/smp_svr

@@ -1,0 +1,19 @@
+
+manifest:
+  version: 0.13
+
+  defaults:
+    remote: zephyrproject-rtos
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      revision: main   # 需要稳定版本时改为具体标签，例如 v3.6.0 或 v4.x
+      import: true
+      path: zephyr
+
+  self:
+    path: qemu-labs

@@ -1,0 +1,8 @@
+
+build/
+.west/
+.venv/
+*.pyc
+__pycache__/
+zephyr/.git/
+zephyr/sdk/

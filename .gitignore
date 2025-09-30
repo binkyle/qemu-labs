@@ -6,3 +6,7 @@ build/
 __pycache__/
 zephyr/.git/
 zephyr/sdk/
+modules/
+zephyr/
+bootloader/
+

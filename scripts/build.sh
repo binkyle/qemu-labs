@@ -14,22 +14,20 @@ while getopts "b:t:o:" opt; do
   esac
 done
 
-TOP="$(git rev-parse --show-toplevel)"
-# 关键修改：用 west topdir 获取 workspace 根，无论你把 workspace 放哪里都能解析对
+TOP="$(git rev-parse --show_toplevel 2>/dev/null || git rev-parse --show-toplevel)"
 WEST_TOPDIR="$(west topdir)"
 ZEPHYR_BASE="${WEST_TOPDIR}/zephyr"
 
 APP_PATH_FILE="${TOP}/labs/mcuboot/app_path.txt"
 APP_PATH="$(cat "${APP_PATH_FILE}")"
 
-# 应用绝对路径（相对路径视为 Zephyr 树内路径）
+# 相对路径视为 Zephyr 树内路径
 if [[ "${APP_PATH}" != /* ]]; then
   APP_ABS="${ZEPHYR_BASE}/${APP_PATH}"
 else
   APP_ABS="${APP_PATH}"
 fi
 
-# overlay（默认用 Zephyr 自带）
 OVERLAY_UDP="${ZEPHYR_BASE}/samples/subsys/mgmt/mcumgr/smp_svr/overlay-udp.conf"
 OVERLAY_SERIAL="${ZEPHYR_BASE}/samples/subsys/mgmt/mcumgr/smp_svr/overlay-serial.conf"
 EXTRA="-DEXTRA_CONF_FILE=${OVERLAY_SERIAL}"
@@ -41,9 +39,9 @@ echo "[*] Building ${APP_ABS} for ${BOARD} (transport=${TRANSPORT}) ..."
 if [ ! -d "${APP_ABS}" ]; then
   echo "ERROR: source directory ${APP_ABS} does not exist"
   echo "HINT:"
-  echo "  - 确认 west workspace 正确（west topdir = ${WEST_TOPDIR}）"
-  echo "  - 确认 Zephyr 已克隆在：${ZEPHYR_BASE}"
-  echo "  - 当前 app_path.txt = ${APP_PATH}"
+  echo "  - west topdir = ${WEST_TOPDIR}"
+  echo "  - ZEPHYR_BASE = ${ZEPHYR_BASE}"
+  echo "  - app_path.txt = ${APP_PATH}"
   exit 2
 fi
 

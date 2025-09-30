@@ -38,9 +38,19 @@ sed -i 's|^\(\s*path:\s*\).*|\1.|' west.yml
 # 若父目录存在历史 .west，备份后清掉
 [ -d ../.west ] && mv ../.west ../.west.bak_$(date +%s) || true
 rm -rf .west
-west init -l . .
+# 关键修复：只有一个点
+west init -l .
 west update
 west zephyr-export
+
+# 验证 workspace 根目录
+TOPDIR="$(west topdir)"
+if [ "$TOPDIR" != "$ROOT" ]; then
+  red "[X] workspace 根目录不是 qemu-labs：$TOPDIR"
+  echo "    期望：$ROOT"
+  exit 3
+fi
+test -d zephyr || { red "[X] 未找到 $ROOT/zephyr（west update 是否成功？）"; exit 3; }
 
 cyan "[5/8] 安装 Zephyr SDK（仅 ARM/AArch64，安装到 $ZEPHYR_SDK_INSTALL_DIR）"
 west sdk install -t aarch64-zephyr-elf -t arm-zephyr-eabi || {
@@ -49,7 +59,7 @@ west sdk install -t aarch64-zephyr-elf -t arm-zephyr-eabi || {
     "$ZEPHYR_SDK_INSTALL_DIR/setup.sh" -t aarch64-zephyr-elf -t arm-zephyr-eabi
   else
     red "[X] SDK 安装失败，请检查网络或手动下载 .run 到 $ZEPHYR_SDK_INSTALL_DIR 再执行 setup.sh"
-    exit 3
+    exit 4
   fi
 }
 

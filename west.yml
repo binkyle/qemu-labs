@@ -13,7 +13,7 @@ manifest:
     - name: zephyr
       revision: main   # 需要稳定版本时改为具体标签，例如 v3.6.0 或 v4.x
       import: true
-      path: zephyr
+      path: .
 
   self:
-    path: qemu-labs
+    path: .

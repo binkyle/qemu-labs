@@ -7,8 +7,8 @@ manifest:
     remote: zephyrproject-rtos
   projects:
     - name: zephyr
-      revision: main           # 可改 v3.6.0 等稳定标签
-      path: zephyr             # => qemu-labs/zephyr
-      import: true             # 其余模块也在 qemu-labs/ 下
+      revision: main           # 可改为稳定标签如 v3.6.0
+      path: zephyr             # -> qemu-labs/zephyr
+      import: true             # 其余模块也落到 qemu-labs/ 下
   self:
-    path: .                    # 关键：manifest 仓库 = topdir 本身
+    path: .                    # 关键：topdir 就是当前仓库

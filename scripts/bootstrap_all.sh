@@ -22,6 +22,9 @@ export GOBIN="$ROOT/tools/bin"
 mkdir -p "$GOBIN"
 ZEPHYR_REMOTE_URL_BASE="${ZEPHYR_REMOTE_URL_BASE:-https://github.com/zephyrproject-rtos}"
 # Allow overriding the Zephyr remote base when GitHub is blocked
+if [ "$ZEPHYR_REMOTE_URL_BASE" = "https://github.com/zephyrproject-rtos" ]; then
+  yellow "提示：若无法直连 GitHub，可在运行脚本前先设置 ZEPHYR_REMOTE_URL_BASE 为国内镜像 URL"
+fi
 
 test -f west.yml || {
   red "[X] 未找到 west.yml，请在仓库根执行。当前目录: $ROOT"

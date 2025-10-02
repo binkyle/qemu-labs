@@ -1,0 +1,14 @@
+manifest:
+  version: 0.13
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+  defaults:
+    remote: zephyrproject-rtos
+  projects:
+    - name: zephyr
+      revision: main          # 可改为稳定标签，如 v3.6.0
+      path: zephyr            # -> qemu-labs/zephyr
+      import: true            # 其余模块也落到 qemu-labs/ 下
+  self:
+    path: .                   # 关键：topdir 就是当前仓库

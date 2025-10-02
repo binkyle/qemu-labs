@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QEMU-Labs 一键环境搭建（幂等；强制 west topdir=仓库根；不会去父目录）
-# version: 2025-10-02-fix-topdir-v2
+# version: 2025-10-02-fix-topdir-v3
 set -Eeuo
 if set -o 2>/dev/null | grep -q 'pipefail'; then set -o pipefail; fi
 
@@ -15,7 +15,7 @@ ok()   { printf "${GREEN}%s${RESET}\n" "$*"; }
 warn() { printf "${YELLOW}%s${RESET}\n" "$*"; }
 err()  { printf "${RED}%s${RESET}\n" "$*"; }
 
-# ---- 可选参数 ----
+# ---- 参数 ----
 REBUILD=0; NOBUILD=0; NORUN=0; REINIT=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,14 +31,12 @@ done
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$ROOT/.zephyr-sdk}"
-export GOBIN="$ROOT/tools/bin"
-mkdir -p "$GOBIN"
-
+export GOBIN="$ROOT/tools/bin"; mkdir -p "$GOBIN"
 [[ -f west.yml ]] || { err "[X] 未找到 west.yml；请在仓库根运行。当前: $ROOT"; exit 2; }
 
 # ---- 0) CRLF 提醒（可选） ----
 if LC_ALL=C grep -q $'\r' "$0" 2>/dev/null; then
-  warn "[!] 检测到 CRLF，建议执行：sed -i 's/\\r$//' scripts/*.sh"
+  warn "[!] 检测到 CRLF，建议先执行：sed -i 's/\\r$//' scripts/*.sh"
 fi
 
 # ---- 1) 系统依赖（幂等） ----
@@ -56,7 +54,6 @@ log "[2/9] Python venv 与 west 依赖"
 [[ -d .venv ]] || python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
-
 python3 - <<'PY'
 import sys
 try:
@@ -71,19 +68,18 @@ if [[ $? -eq 42 ]]; then
 fi
 hash -r 2>/dev/null || true
 
-# ---- 3) west 工作区（强制 topdir=仓库根；预置 .west/config 免疫父目录吸走） ----
-log "[3/9] 初始化/检查 west 工作区（topdir=仓库根）"
+# ---- 3) 锁定 workspace topdir=仓库根（预置 .west/config，免疫父目录吸走） ----
+log "[3/9] 锁定 workspace 到仓库根（不会去父目录）"
 
+# 3.0 处理父目录干扰；--reinit 时一并清理本地 .west
 PARENT="${ROOT%/*}"
-# 3.0 如果父目录存在 .west，会“吸走”topdir；一律先备份移走
 if [[ -d "$PARENT/.west" ]]; then
   warn "   -> 发现父目录 $PARENT/.west，已备份为 $PARENT/.west.bak.$(date +%s)"
   mv "$PARENT/.west" "$PARENT/.west.bak.$(date +%s)"
 fi
-# --reinit 时清理本地 .west
 [[ $REINIT -eq 1 && -d .west ]] && rm -rf .west
 
-# 3.1 预置 .west/config（把工作区“钉”在当前仓库）
+# 3.1 预置 .west/config（把 topdir 钉在当前仓库）
 mkdir -p .west
 cat > .west/config <<'CONF'
 [manifest]
@@ -91,7 +87,7 @@ path = .
 file = west.yml
 CONF
 
-# 3.2 写最小 manifest（保证 self.path = .；zephyr 在仓库内）
+# 3.2 写最小 manifest（保证 self.path = .；模块都在仓库内）
 cp -a west.yml "west.yml.bak.$(date +%s)" 2>/dev/null || true
 cat > west.yml <<'EOF'
 manifest:
@@ -110,7 +106,7 @@ manifest:
     path: .
 EOF
 
-# 3.3 初始化到“当前目录”（即使失败也无所谓，我们已预置好 .west/config）
+# 3.3 初始化到“当前目录”（即使失败也没关系；我们已预置好 .west/config）
 west init -l . || true
 
 # 3.4 修正配置并拉取；校验 topdir 必须是仓库根

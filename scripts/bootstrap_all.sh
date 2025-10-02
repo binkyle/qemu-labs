@@ -52,14 +52,20 @@ if [[ ! -d .venv ]]; then python3 -m venv .venv; fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-python - <<'PY'
-import importlib, sys
-missing = [m for m in ("west","semver","patoolib") if importlib.util.find_spec(m) is None]
-sys.exit(0 if not missing else 42)
+python3 - <<'PY'
+import sys
+mods = ["west","semver","patoolib"]
+try:
+    for m in mods:
+        __import__(m)
+    sys.exit(0)   # 全部已安装
+except Exception:
+    sys.exit(42)  # 有缺失
 PY
+
 if [[ $? -eq 42 ]]; then
-  python -m pip install -U pip setuptools wheel
-  python -m pip install -U west semver patool requests tqdm pyyaml colorama psutil
+  python3 -m pip install -U pip setuptools wheel
+  python3 -m pip install -U west semver patool requests tqdm pyyaml colorama psutil
 fi
 hash -r 2>/dev/null || true
 

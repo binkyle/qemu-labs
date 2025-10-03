@@ -16,7 +16,7 @@ warn() { printf "${YELLOW}%s${RESET}\n" "$*"; }
 err()  { printf "${RED}%s${RESET}\n" "$*"; }
 
 # ---- 路径 ----
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(basename "$ROOT")"
 cd "$ROOT"
 [[ -f west.yml ]] || { err "[X] 未找到 west.yml；请在仓库根运行。当前: $ROOT"; exit 2; }
@@ -118,15 +118,11 @@ fi
 
 # ---- [7/8] 构建演示：qemu_cortex_a53 + MCUboot + smp_svr（串口） ----
 log "[7/8] 构建演示（qemu_cortex_a53 + MCUboot + smp_svr, serial）"
-if [[ -x ./scripts/build.sh ]]; then
-  ./scripts/build.sh -b qemu_cortex_a53 -t serial
-else
-  APP="$ROOT/zephyr/samples/subsys/mgmt/mcumgr/smp_svr"
-  [[ -d "$APP" ]] || { err "[X] 不存在：$APP"; exit 6; }
-  west build -b qemu_cortex_a53 --sysbuild "$APP" -d build \
-    -- -DCONFIG_BOOTLOADER_MCUBOOT=y \
-       -DEXTRA_CONF_FILE="$APP/overlay-serial.conf"
-fi
+APP="$ROOT/zephyr/samples/subsys/mgmt/mcumgr/smp_svr"
+[[ -d "$APP" ]] || { err "[X] 不存在：$APP"; exit 6; }
+west build -b qemu_cortex_a53 --sysbuild "$APP" -d build \
+  -- -DCONFIG_BOOTLOADER_MCUBOOT=y \
+     -DEXTRA_CONF_FILE="$APP/overlay-serial.conf"
 
 # ---- [8/8] 运行（QEMU 串口） ----
 log "[8/8] 运行（QEMU 串口）"

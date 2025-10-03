@@ -1,90 +1,140 @@
 #!/usr/bin/env bash
-# QEMU-Labs 一键环境搭建（把所有模块与 SDK 安装到当前仓库内）
-set -euo pipefail
+# QEMU-Labs 统一构建脚本（不会把 west 放到父目录）
+# version: 2025-10-03-fix-build-topdir
+set -Eeuo
+if set -o 2>/dev/null | grep -q 'pipefail'; then set -o pipefail; fi
 
-cyan()  { printf "\033[36m%s\033[0m\n" "$*"; }
-green() { printf "\033[32m%s\033[0m\n" "$*"; }
-yellow(){ printf "\033[33m%s\033[0m\n" "$*"; }
-red()   { printf "\033[31m%s\033[0m\n" "$*"; }
+# ---- 简易日志 ----
+RESET='\033[0m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
+log()  { printf "${CYAN}%s${RESET}\n" "$*"; }
+ok()   { printf "${GREEN}%s${RESET}\n" "$*"; }
+warn() { printf "${YELLOW}%s${RESET}\n" "$*"; }
+err()  { printf "${RED}%s${RESET}\n" "$*"; }
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO="$(basename "$ROOT")"                 # e.g. qemu-labs
-TOPDIR_PARENT="$(cd "$ROOT/.." && pwd)"    # workspace topdir（父目录）
+# ---- 路径 ----
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(basename "$ROOT")"
 cd "$ROOT"
-test -f west.yml || { red "[X] 未找到 west.yml，请在 $REPO 根目录执行"; exit 2; }
+[[ -f west.yml ]] || { err "[X] 未找到 west.yml；请在仓库根运行。当前: $ROOT"; exit 2; }
 
-# 全部落库：SDK & 工具
-export ZEPHYR_SDK_INSTALL_DIR="$ROOT/.zephyr-sdk"
-export GOBIN="$ROOT/tools/bin"
-mkdir -p "$GOBIN"
+# 统一安装到仓库内（若系统已装 SDK，会被 west 复用；可改成强制仓库内，见注释）
+export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$ROOT/.zephyr-sdk}"
+export GOBIN="$ROOT/tools/bin"; mkdir -p "$GOBIN"
 
-cyan "[1/8] 系统依赖"
+# ---- [1/8] 系统依赖 ----
+log "[1/8] 系统依赖"
 sudo apt-get update -y
 sudo apt-get install -y --no-install-recommends \
   git cmake ninja-build gperf ccache dfu-util device-tree-compiler \
   xz-utils p7zip-full unzip tar curl wget file make gcc g++ \
   golang build-essential
+git config --global core.autocrlf input || true
+git config --global fetch.prune true || true
 
-cyan "[2/8] Python venv（$REPO/.venv）"
-if [ ! -d .venv ]; then python3 -m venv .venv; fi
+# ---- [2/8] Python venv ----
+log "[2/8] Python venv（$REPO/.venv）"
+[[ -d .venv ]] || python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
-python -m pip install -U pip setuptools wheel
+python3 -m pip install -U pip setuptools wheel
 
-cyan "[3/8] 安装 west + 扩展依赖（semver/patool 等）"
-python -m pip install -U west semver patool requests tqdm pyyaml colorama psutil
+# ---- [3/8] west + 依赖 ----
+log "[3/8] 安装 west + 扩展依赖（semver/patool 等）"
+python3 -m pip install -U west semver patool requests tqdm pyyaml colorama psutil
 
-cyan "[4/8] 以父目录作为 workspace topdir 初始化（模块全部克隆到 $REPO/ 内）"
-# 备份旧 west.yml 并重写一个“路径固定到仓库”的 manifest
-cp -a west.yml "west.yml.bak.$(date +%s)" || true
-cat > west.yml <<EOF
+# ---- [4/8] 锁定 workspace 到仓库根（不去父目录） ----
+log "[4/8] 锁定 workspace 到仓库根（模块全部克隆到 $REPO/ 内）"
+
+# 4.1 预置 .west/config：把工作区“钉”在当前仓库
+mkdir -p .west
+cat > .west/config <<'CONF'
+[manifest]
+path = .
+file = west.yml
+CONF
+
+# 4.2 写最小 manifest（保证 self.path = .；模块都在仓库内）
+cp -a west.yml "west.yml.bak.$(date +%s)" 2>/dev/null || true
+cat > west.yml <<'EOF'
 manifest:
   version: 0.13
-  defaults:
-    remote: zephyrproject-rtos
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
+  defaults:
+    remote: zephyrproject-rtos
   projects:
     - name: zephyr
       revision: main
-      path: ${REPO}/zephyr            # <== 把 zephyr 放到 仓库内
-      import:
-        path-prefix: ${REPO}          # <== 所有 imported 模块也前缀到 仓库内
+      path: zephyr
+      import: true
   self:
-    path: ${REPO}                      # <== manifest 仓库在 topdir/${REPO}
+    path: .
 EOF
 
-# 清理历史 workspace 标记，并在父目录创建新的 workspace
-[ -d "$TOPDIR_PARENT/.west" ] && mv "$TOPDIR_PARENT/.west" "$TOPDIR_PARENT/.west.bak.$(date +%s)" || true
-rm -rf .west
+# 4.3 仅在“尚未初始化”时才 init（避免 already initialized 噪音）
+if [[ ! -f .west/manifest ]]; then
+  west init -l .
+fi
 
-# 注意这里用 ".."：workspace topdir = 父目录；模块都会按上面 path-prefix 克隆到 $REPO/ 下
-west init -l ..
+# 4.4 修正配置并拉取；校验 topdir 必须是仓库根
+west config manifest.path .
+west config manifest.file west.yml
 west update
-west zephyr-export
+td="$(west topdir 2>/dev/null || true)"
+if [[ "$td" != "$ROOT" ]]; then
+  err "[X] west topdir=$td 仍不是仓库根=$ROOT；请执行：rm -rf ../.west .west；然后重跑 ./build.sh"
+  exit 3
+fi
+[[ -d "$ROOT/zephyr" ]] || { err "[X] 未找到 $ROOT/zephyr；west update 失败？"; exit 3; }
+ok "   -> workspace OK：$td"
 
-# 基础校验
-test -d "$TOPDIR_PARENT/$REPO/zephyr" || { red "[X] 未找到 $REPO/zephyr（west update 失败？）"; exit 3; }
-cyan "    workspace topdir: $(west topdir)"
-cyan "    ZEPHYR_BASE 应在: $TOPDIR_PARENT/$REPO/zephyr"
+# ---- [5/8] 安装 Zephyr SDK（仅 ARM/AArch64） ----
+log "[5/8] 安装 Zephyr SDK（仅 ARM/AArch64，安装到 $ZEPHYR_SDK_INSTALL_DIR 或复用系统已有）"
+missing=()
+[[ -x "$ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc" ]] || missing+=("aarch64-zephyr-elf")
+[[ -x "$ZEPHYR_SDK_INSTALL_DIR/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc"       ]] || missing+=("arm-zephyr-eabi")
+if [[ ${#missing[@]} -gt 0 ]]; then
+  west sdk install $(printf -- " -t %s" "${missing[@]}") || {
+    warn "[!] west sdk install 失败；若你已手动下载安装器到 $ZEPHYR_SDK_INSTALL_DIR："
+    echo "    \"$ZEPHYR_SDK_INSTALL_DIR/setup.sh\" $(printf -- " -t %s" "${missing[@]}")"
+    exit 4
+  }
+else
+  ok "   -> 工具链已就绪，跳过安装"
+fi
+# 如需强制使用仓库内 SDK，可先 mv /root/zephyr-sdk-*/ 到备份名，并清 ~/.cmake/packages/Zephyr-sdk 再安装。
 
-cyan "[5/8] 安装 Zephyr SDK（仅 ARM/AArch64，安装到 $ZEPHYR_SDK_INSTALL_DIR）"
-west sdk install -t aarch64-zephyr-elf -t arm-zephyr-eabi || {
-  yellow "[!] west sdk install 失败，若已手动下载安装器到 $ZEPHYR_SDK_INSTALL_DIR，请执行："
-  echo    "    \"$ZEPHYR_SDK_INSTALL_DIR/setup.sh\" -t aarch64-zephyr-elf -t arm-zephyr-eabi"
-  exit 4
-}
+# ---- [6/8] 安装 mcumgr 到 $GOBIN ----
+log "[6/8] 安装 mcumgr 到 $GOBIN"
+if ! command -v mcumgr >/dev/null 2>&1; then
+  [[ -x "$GOBIN/mcumgr" ]] || go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest || true
+  export PATH="$GOBIN:$PATH"
+fi
 
-cyan "[6/8] 安装 mcumgr 到 $GOBIN"
-go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest || true
-export PATH="$GOBIN:$PATH"
+# ---- [7/8] 构建演示：qemu_cortex_a53 + MCUboot + smp_svr（串口） ----
+log "[7/8] 构建演示（qemu_cortex_a53 + MCUboot + smp_svr, serial）"
+if [[ -x ./scripts/build.sh ]]; then
+  ./scripts/build.sh -b qemu_cortex_a53 -t serial
+else
+  APP="$ROOT/zephyr/samples/subsys/mgmt/mcumgr/smp_svr"
+  [[ -d "$APP" ]] || { err "[X] 不存在：$APP"; exit 6; }
+  west build -b qemu_cortex_a53 --sysbuild "$APP" -d build \
+    -- -DCONFIG_BOOTLOADER_MCUBOOT=y \
+       -DEXTRA_CONF_FILE="$APP/overlay-serial.conf"
+fi
 
-cyan "[7/8] 构建演示：qemu_cortex_a53 + MCUboot + smp_svr（串口）"
-./scripts/build.sh -b qemu_cortex_a53 -t serial
-
-cyan "[8/8] 运行（QEMU 串口）"
-./scripts/run.sh || true
+# ---- [8/8] 运行（QEMU 串口） ----
+log "[8/8] 运行（QEMU 串口）"
+if [[ -x ./scripts/run.sh ]]; then
+  ./scripts/run.sh || true
+else
+  west build -d build -t run || true
+fi
 
 cat <<'MSG'
 
@@ -96,17 +146,7 @@ cat <<'MSG'
    export PATH="$(pwd)/tools/bin:$PATH"
    export SERIAL_DEV=/dev/pts/<N>
    ./scripts/mcumgr.sh serial-list
-
-原生 Linux 想用 UDP：
-   ./scripts/net_up.sh
-   ./scripts/build.sh -b qemu_cortex_a53 -t udp
-   ./scripts/run.sh
-   ./scripts/mcumgr.sh list
-   ./scripts/net_down.sh
-
-环境自检（会编译运行 hello_world）：
-   ./scripts/check_sdk.sh
 ============================================================
 MSG
 
-green "全部完成 ✅"
+ok "全部完成 ✅"

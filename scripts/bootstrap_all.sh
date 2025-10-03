@@ -32,6 +32,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$ROOT/.zephyr-sdk}"
 export GOBIN="$ROOT/tools/bin"; mkdir -p "$GOBIN"
+HAL_DIR="$ROOT/modules/hal/nxp"
 [[ -f west.yml ]] || { err "[X] 未找到 west.yml；请在仓库根运行。当前: $ROOT"; exit 2; }
 
 # ---- 0) CRLF 提醒（可选） ----
@@ -109,10 +110,41 @@ EOF
 # 3.3 初始化到“当前目录”（即使失败也没关系；我们已预置好 .west/config）
 west init -l . || true
 
+# 3.3.1 若存在损坏的 hal_nxp 目录，先备份后让 west 重新克隆
+backup_hal_nxp_dir() {
+  local reason="$1"
+  local ts target
+  ts="$(date +%s)"
+  target="${HAL_DIR}.bak.${ts}.${reason}.${RANDOM}"
+  warn "   -> 检测到 hal_nxp 异常（${reason}），已备份至 ${target#$ROOT/}"
+  mv "$HAL_DIR" "$target"
+}
+
+if [[ -e "$HAL_DIR" && ! -d "$HAL_DIR" ]]; then
+  backup_hal_nxp_dir "not-a-directory"
+elif [[ -d "$HAL_DIR" ]]; then
+  if ! git -C "$HAL_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    backup_hal_nxp_dir "no-git"
+  else
+    if ! git -C "$HAL_DIR" remote get-url upstream >/dev/null 2>&1; then
+      backup_hal_nxp_dir "missing-upstream"
+    elif [[ -n "$(git -C "$HAL_DIR" status --porcelain 2>/dev/null)" ]]; then
+      backup_hal_nxp_dir "dirty"
+    fi
+  fi
+fi
+
 # 3.4 修正配置并拉取；校验 topdir 必须是仓库根
 west config manifest.path .
 west config manifest.file west.yml
-west update
+if ! west update; then
+  warn "   -> west update 首次执行失败，尝试清理后重试"
+  if [[ -d "$HAL_DIR" ]]; then
+    warn "   -> 重新命名 hal_nxp 目录后再拉取"
+    backup_hal_nxp_dir "auto-retry"
+  fi
+  west update
+fi
 
 td="$(west topdir 2>/dev/null || true)"
 if [[ "$td" != "$ROOT" ]]; then
@@ -125,7 +157,6 @@ ok "   -> workspace OK：$td"
 
 # ---- 4) hal_nxp 兜底（缺失才处理） ----
 log "[4/9] 校验 hal_nxp 模块"
-HAL_DIR="$ROOT/modules/hal/nxp"
 if [[ ! -d "$HAL_DIR" ]]; then
   warn "   -> 缺少 hal_nxp，定向 west update hal_nxp"
   if ! west update -v hal_nxp; then

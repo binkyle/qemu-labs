@@ -1,0 +1,15 @@
+manifest:
+  version: 0.13
+  defaults:
+    remote: zephyrproject-rtos
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: zephyr
+      revision: main
+      path: qemu-labs/zephyr            # <== 把 zephyr 放到 仓库内
+      import:
+        path-prefix: qemu-labs          # <== 所有 imported 模块也前缀到 仓库内
+  self:
+    path: qemu-labs                      # <== manifest 仓库在 topdir/qemu-labs

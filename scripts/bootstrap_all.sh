@@ -55,15 +55,15 @@ log "[2/9] Python venv 与 west 依赖"
 [[ -d .venv ]] || python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
-python3 - <<'PY'
-import sys
-try:
-  for m in ("west","semver","patoolib","jsonschema"): __import__(m)
-  sys.exit(0)
-except Exception:
-  sys.exit(42)
+if ! python3 - <<'PY'; then
+  import importlib.util
+  required = ("west","semver","patoolib","jsonschema")
+  missing = [name for name in required if importlib.util.find_spec(name) is None]
+  if missing:
+    raise SystemExit(1)
+  raise SystemExit(0)
 PY
-if [[ $? -eq 42 ]]; then
+  log "   -> 安装缺失的 Python 依赖（west/semver/patool/jsonschema）"
   python3 -m pip install -U pip setuptools wheel
   python3 -m pip install -U west semver patool requests tqdm pyyaml colorama psutil jsonschema
 fi

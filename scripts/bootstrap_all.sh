@@ -58,14 +58,14 @@ source .venv/bin/activate
 python3 - <<'PY'
 import sys
 try:
-  for m in ("west","semver","patoolib"): __import__(m)
+  for m in ("west","semver","patoolib","jsonschema"): __import__(m)
   sys.exit(0)
 except Exception:
   sys.exit(42)
 PY
 if [[ $? -eq 42 ]]; then
   python3 -m pip install -U pip setuptools wheel
-  python3 -m pip install -U west semver patool requests tqdm pyyaml colorama psutil
+  python3 -m pip install -U west semver patool requests tqdm pyyaml colorama psutil jsonschema
 fi
 hash -r 2>/dev/null || true
 

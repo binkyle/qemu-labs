@@ -1,0 +1,18 @@
+*** Begin Patch
+*** Update File: scripts/bootstrap_all.sh
+@@
+-  if [[ -x ./scripts/build.sh ]]; then
+-    ./scripts/build.sh -b qemu_cortex_a53 -t serial
+-  else
+-    OVERLAY_SERIAL="/overlay-serial.conf"
+-    [[ -d "" ]] || { err "[X] 不存在："; exit 6; }
+-    west build -b qemu_cortex_a53 --sysbuild "" -d "" -      -- -DCONFIG_BOOTLOADER_MCUBOOT=y -DCONFIG_MCUBOOT_LOG_LEVEL_INF=y -         -DEXTRA_CONF_FILE=""
+-  fi
++  PM_ARGS=()
++  if [[ -f "/labs/mcuboot/pm_static.yml" ]]; then
++    PM_ARGS+=(-DPM_STATIC_YML="/labs/mcuboot/pm_static.yml")
++  fi
++  OVERLAY_SERIAL="/overlay-serial.conf"
++  [[ -d "" ]] || { err "[X] 不存在："; exit 6; }
++  west build -b qemu_cortex_a53 --sysbuild "" -d "" +     -- -DCONFIG_BOOTLOADER_MCUBOOT=y -DCONFIG_MCUBOOT_LOG_LEVEL_INF=y +       -DEXTRA_CONF_FILE=""
+*** End Patch

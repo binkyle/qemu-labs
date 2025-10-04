@@ -1,0 +1,14 @@
+﻿flash_primary:
+  region: flash_primary
+  size: 0x400000
+  partition:
+    - name: mcuboot
+      size: 0x00010000
+    - name: image-0
+      size: 0x00140000
+    - name: image-1
+      size: 0x00140000
+    - name: scratch
+      size: 0x00020000
+    - name: storage
+      size: 0x00008000
